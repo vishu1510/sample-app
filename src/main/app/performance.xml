@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp" xmlns:vm="http://www.mulesoft.org/schema/mule/vm" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:context="http://www.springframework.org/schema/context" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-current.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+    <file:connector name="File" autoDelete="true" streaming="true" validateConnections="true" doc:name="File"/>
+    <asynchronous-processing-strategy name="Asynchronous_Processing_Strategy" maxThreads="${thread.max}" minThreads="${thread.min}" threadTTL="180000" threadWaitTimeout="180000" doc:name="Asynchronous Processing Strategy"/>
+    <context:property-placeholder location="performance-dev.properties"/>
+    <http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0" port="8081" doc:name="HTTP Listener Configuration"/>
+    <flow name="performanceFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/highestbid" doc:name="HTTP"/>
+        <byte-array-to-string-transformer doc:name="Byte Array to String"/>
+        <request-reply doc:name="Request-Reply">
+            <vm:outbound-endpoint exchange-pattern="one-way" path="bids" doc:name="VM"/>
+            <vm:inbound-endpoint exchange-pattern="one-way" path="two" doc:name="VM"/>
+        </request-reply>
+        <logger message="The responmse payload is #[payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+    <flow name="performanceFlow1" >
+        <vm:inbound-endpoint exchange-pattern="one-way" path="bids" doc:name="VM"/>
+          <set-variable variableName="MULE_REPLYTO_STOP" value="true" doc:name="MULE_REPLYTO_STOP" />
+        <expression-component doc:name="Expression"><![CDATA[String[] bid= payload.split('\n');
+payload = java.util.Arrays.asList(bid);]]></expression-component>
+        <collection-splitter doc:name="Collection Splitter"/>
+        <vm:outbound-endpoint exchange-pattern="one-way" path="one" doc:name="VM"/>
+    </flow>
+    <flow name="performanceFlow2" processingStrategy="Asynchronous_Processing_Strategy">
+        <vm:inbound-endpoint exchange-pattern="one-way" path="one" doc:name="VM"/>
+        <component class="com.mulesoft.EnricherAuctionComponent" doc:name="Java"/>
+        <collection-aggregator failOnTimeout="true" doc:name="Collection Aggregator"/>
+        <component class="com.mulesoft.HighestBidderAuctionComponent" doc:name="Java"/>
+        <logger message="The payload befopre sending to response queue is #[payload]" level="INFO" doc:name="Logger"/>
+        <vm:outbound-endpoint exchange-pattern="one-way" path="two" doc:name="VM"/>
+    </flow>
+</mule>
